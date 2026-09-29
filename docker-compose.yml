@@ -1,0 +1,36 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: family-tree-backend
+    environment:
+      - DATA_DIR=/app/data
+      - SECRET_KEY=${SECRET_KEY:-family-tree-change-me}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-family123}
+      - SITE_TITLE=${SITE_TITLE:-Our Family Tree}
+      - SEED_DEMO_DATA=${SEED_DEMO_DATA:-false}
+      - MAX_UPLOAD_BYTES=${MAX_UPLOAD_BYTES:-26214400}
+    volumes:
+      - ${DATA_DIR:-./data}:/app/data
+    restart: unless-stopped
+    networks:
+      - family-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: family-tree-frontend
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - family-net
+
+networks:
+  family-net:
+    driver: bridge

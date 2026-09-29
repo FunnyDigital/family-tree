@@ -1,0 +1,12 @@
+# Keep the repository in LF. Without this, a Windows checkout can rewrite
+# backend/entrypoint.sh with CRLF and the container fails with a bad interpreter.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
