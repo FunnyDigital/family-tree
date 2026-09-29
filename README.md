@@ -63,21 +63,19 @@ uploads folder, which makes backup and snapshots on TrueNAS trivial.
 GitHub builds the two images for free, then you install them from the TrueNAS **Apps** screen — no
 terminal, no compiling anything yourself.
 
-### One-time: publish the images
+### The images (already published)
 
-1. **Push this folder to GitHub** (a free account is fine; a public repo is simplest).
-2. The included workflow `.github/workflows/build-images.yml` then publishes two images to the
-   GitHub Container Registry:
+The images are built and public, ready to pull:
 
-   - `ghcr.io/<your-username>/family-tree-backend:latest`
-   - `ghcr.io/<your-username>/family-tree-frontend:latest`
+- `ghcr.io/funnydigital/family-tree-backend:latest`
+- `ghcr.io/funnydigital/family-tree-frontend:latest`
 
-   Watch it under the repo's **Actions** tab — the first run takes a couple of minutes.
-3. **Make the packages public** so TrueNAS can pull them without a login: on GitHub open your profile
-   → **Packages** → pick each package → **Package settings** → **Change visibility → Public**.
+`.github/workflows/build-images.yml` rebuilds and republishes them on every push to `main`. Because
+the repository is public the packages are public too, so TrueNAS pulls them with no login.
 
-   > Keeping them private also works — just add your GitHub username and a Personal Access Token
-   > (with the `read:packages` scope) as a registry credential in TrueNAS before installing.
+> If you ever move this into a **private** repo, the packages default to private. Either flip each one
+> to public (your profile → **Packages** → package → **Package settings** → **Change visibility →
+> Public**) or add a registry credential in TrueNAS using a token with the `read:packages` scope.
 
 ### One-time: a place for your data
 
@@ -87,10 +85,9 @@ example pool `tank`, name `apps/family-tree`). Note its path, e.g. `/mnt/tank/ap
 ### Install
 
 1. In TrueNAS go to **Apps → Custom App → Install via YAML**.
-2. Name it `family-tree`, paste the contents of `deploy/truenas-custom-app.yaml`, and change the
-   things marked at the top of that file:
-   - `YOUR-GITHUB-USERNAME` → your GitHub username, lowercase (it appears twice)
-   - the data path → `/mnt/tank/apps/family-tree` (your dataset)
+2. Name it `family-tree`, paste the contents of `deploy/truenas-custom-app.yaml` — the image paths
+   are already filled in — and change two things:
+   - the data path → `/mnt/tank/apps/family-tree/data` (your dataset)
    - `SECRET_KEY`, `ADMIN_PASSWORD`, and `SITE_TITLE`
 3. Click **Install**. TrueNAS pulls the images and starts both containers.
 4. Open `http://<truenas-ip>:8080` and sign in at `/login`.

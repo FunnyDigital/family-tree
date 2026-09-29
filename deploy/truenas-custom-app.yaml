@@ -1,23 +1,27 @@
 # TrueNAS SCALE 24.10+ — Apps → Custom App → Install via YAML
 #
-# Edit these three things before installing:
-#   1. YOUR-GITHUB-USERNAME  → your GitHub username/org, lowercase (appears twice)
-#   2. /mnt/tank/apps/family-tree/data → your dataset path for the database + photos
-#   3. SECRET_KEY, ADMIN_PASSWORD and SITE_TITLE
+# The image paths below are ready to use (ghcr.io/funnydigital/...) and public.
+#
+# Check these before installing:
+#   /mnt/tank/apps/family-tree/data → your dataset path for the database + photos
+#   SECRET_KEY, ADMIN_PASSWORD and SITE_TITLE
 #
 # Create the data folder first (or point at a dataset root).
 # Both services share the app's default network, so the frontend reaches the
 # backend at http://backend:8000 — no network block needed.
+#
+# To update later: push to GitHub, then press Restart on the app
+# (pull_policy: always fetches the newest image).
 
 services:
   backend:
-    image: ghcr.io/YOUR-GITHUB-USERNAME/family-tree-backend:latest
+    image: ghcr.io/funnydigital/family-tree-backend:latest
     pull_policy: always
     environment:
       - DATA_DIR=/app/data
       - SECRET_KEY=change-this-to-a-long-random-string
       - ADMIN_USERNAME=admin
-      - ADMIN_PASSWORD=change-me
+      - ADMIN_PASSWORD=admin
       - SITE_TITLE=Our Family Tree
       - SEED_DEMO_DATA=false
     volumes:
@@ -25,7 +29,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: ghcr.io/YOUR-GITHUB-USERNAME/family-tree-frontend:latest
+    image: ghcr.io/funnydigital/family-tree-frontend:latest
     pull_policy: always
     ports:
       - "8080:80"
