@@ -56,13 +56,14 @@ if ($needNode -and -not $haveNode) {
 }
 
 # --- backend ---------------------------------------------------------------
-if (-not (Test-Path $venvPython)) {
+$freshVenv = -not (Test-Path $venvPython)
+if ($freshVenv) {
     Step "Creating the Python environment (first run only)"
     Run "python" @("-m", "venv", $venvDir)
+    Run $venvPython @("-m", "pip", "install", "--disable-pip-version-check", "--quiet", "--upgrade", "pip") $null
 }
 
 Step "Installing backend dependencies"
-Run $venvPython @("-m", "pip", "install", "--disable-pip-version-check", "--quiet", "--upgrade", "pip") $null
 Run $venvPython @("-m", "pip", "install", "--disable-pip-version-check", "--quiet", "-r", $requirements) $null
 
 # --- interface -------------------------------------------------------------
