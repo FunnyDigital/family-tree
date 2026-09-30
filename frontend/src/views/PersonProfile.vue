@@ -73,7 +73,7 @@
         </div>
 
         <aside class="space-y-8">
-          <section v-if="bioRows.length" class="card p-6" v-reveal="60">
+          <section v-if="hasBiodata" class="card p-6" v-reveal="60">
             <h2 class="mb-4 font-display text-xl font-semibold">Biodata</h2>
             <BiodataTable :person="person" />
           </section>
@@ -154,9 +154,12 @@ const error = ref('')
 
 const photos = computed(() => person.value?.photos || [])
 const stories = computed(() => person.value?.stories || [])
-const bioRows = computed(() => {
+const hasBiodata = computed(() => {
   const p = person.value
-  return p && (p.birth_date || p.death_date || p.occupation || p.maiden_name)
+  if (!p) return false
+  return Boolean(
+    p.birth_date || p.death_date || p.birth_place || p.death_place || p.occupation || p.maiden_name,
+  )
 })
 
 const parents = computed(() => {
