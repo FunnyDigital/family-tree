@@ -15,11 +15,21 @@
           <path v-for="path in layout.paths" :key="path.key" :d="path.d" />
         </g>
         <g fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path v-for="link in layout.coupleLinks" :key="link.id" :d="link.d" />
+          <path v-for="link in recordedCouples" :key="link.id" :d="link.d" />
+        </g>
+        <g
+          fill="none"
+          stroke="#5eead4"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-dasharray="5 5"
+        >
+          <path v-for="link in derivedCouples" :key="link.id" :d="link.d" />
         </g>
         <g fill="#78716c" font-size="11" text-anchor="middle" stroke="none">
           <text
-            v-for="link in layout.coupleLinks"
+            v-for="link in recordedCouples"
             :key="`label-${link.id}`"
             :x="link.midX"
             :y="link.y - 7"
@@ -48,10 +58,29 @@
       @fit="pz?.fit()"
     />
 
-    <div class="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex items-end justify-between gap-3 p-3 sm:p-4">
-      <div class="pointer-events-auto rounded-full border border-line bg-white/90 px-3.5 py-1.5 text-xs text-ink-muted shadow-soft backdrop-blur">
-        <span class="font-medium text-ink-soft">{{ layout.nodes.length }}</span> people ·
-        <span class="font-medium text-ink-soft">{{ layout.generations }}</span> generations
+    <div class="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex flex-wrap items-end justify-between gap-3 p-3 sm:p-4">
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="pointer-events-auto rounded-full border border-line bg-white/90 px-3.5 py-1.5 text-xs text-ink-muted shadow-soft backdrop-blur">
+          <span class="font-medium text-ink-soft">{{ layout.nodes.length }}</span> people ·
+          <span class="font-medium text-ink-soft">{{ layout.generations }}</span> generations
+        </div>
+        <div
+          v-if="recordedCouples.length || derivedCouples.length"
+          class="pointer-events-auto flex items-center gap-3 rounded-full border border-line bg-white/90 px-3.5 py-1.5 text-xs text-ink-muted shadow-soft backdrop-blur"
+        >
+          <span v-if="recordedCouples.length" class="flex items-center gap-1.5">
+            <svg width="20" height="6" aria-hidden="true">
+              <line x1="0" y1="3" x2="20" y2="3" stroke="#10b981" stroke-width="2.5" />
+            </svg>
+            recorded marriage
+          </span>
+          <span v-if="derivedCouples.length" class="flex items-center gap-1.5">
+            <svg width="20" height="6" aria-hidden="true">
+              <line x1="0" y1="3" x2="20" y2="3" stroke="#5eead4" stroke-width="2.5" stroke-dasharray="4 4" />
+            </svg>
+            from shared children
+          </span>
+        </div>
       </div>
       <div class="hidden rounded-full border border-line bg-white/90 px-3.5 py-1.5 text-xs text-ink-faint shadow-soft backdrop-blur sm:block">
         Drag to pan · Scroll to zoom · Click a card for the profile
@@ -98,6 +127,9 @@ const matches = computed(() => {
   if (!query) return []
   return props.persons.filter((person) => person.full_name.toLowerCase().includes(query))
 })
+
+const recordedCouples = computed(() => layout.value.coupleLinks.filter((link) => link.recorded))
+const derivedCouples = computed(() => layout.value.coupleLinks.filter((link) => !link.recorded))
 
 const STATUS_LABEL = {
   married: '',

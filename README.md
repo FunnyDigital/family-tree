@@ -28,8 +28,17 @@ two Docker containers so it deploys to a TrueNAS server with a single command.
 Each person stores a father and a mother, and marriages are separate records. That means a person
 can have several marriages (a remarriage or a step-family) and children are attached to the correct
 couple — children from a first marriage and children from a second sit under the right parents.
-Marriage bars are drawn just below each row so a second marriage never draws a line across someone
-else's card.
+
+**You only enter a marriage once.** A couple is drawn whenever two people are recorded as the parents
+of the same child, so filling in a child's father and mother is enough to show the marriage. Couples
+derived that way appear as a **dashed** line; recording the marriage explicitly as a union turns it
+into a **solid** line with its date and status. That means you can add marriages as you go, or never
+bother, and the tree still reads correctly. A person with two spouses is drawn *between* them, so both
+marriage lines touch them rather than one reaching across the other spouse.
+
+Marriage lines sit just below each row, and the children of a couple drop from the middle of that
+line, so an offspring group always hangs under the right parents and no line is ever drawn across
+someone else's card.
 
 ---
 

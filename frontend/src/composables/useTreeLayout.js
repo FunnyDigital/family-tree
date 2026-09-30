@@ -7,7 +7,43 @@ export const ROW_H = NODE_H + Y_GAP
 
 const SLOT_W = NODE_W + X_GAP
 
-function generationMap(persons, unions) {
+function pairKey(a, b) {
+  return a <= b ? `${a},${b}` : `${b},${a}`
+}
+
+/**
+ * A couple is either an explicitly recorded union, or two people who are father and
+ * mother of the same child. Deriving the second kind means a marriage never has to be
+ * entered twice: recording both parents of a child is enough to draw the couple.
+ */
+function effectiveCouples(persons, unions) {
+  const couples = new Map()
+
+  for (const union of unions) {
+    if (union.partner_a_id == null || union.partner_b_id == null) continue
+    couples.set(pairKey(union.partner_a_id, union.partner_b_id), {
+      id: `union-${union.id}`,
+      a: union.partner_a_id,
+      b: union.partner_b_id,
+      recorded: true,
+      status: union.status,
+      start_date: union.start_date,
+    })
+  }
+
+  for (const person of persons) {
+    const { father_id: father, mother_id: mother } = person
+    if (father == null || mother == null) continue
+    const key = pairKey(father, mother)
+    if (!couples.has(key)) {
+      couples.set(key, { id: `derived-${key}`, a: father, b: mother, recorded: false })
+    }
+  }
+
+  return [...couples.values()]
+}
+
+function generationMap(persons, couples) {
   const byId = new Map(persons.map((p) => [p.id, p]))
   const gen = new Map(persons.map((p) => [p.id, 0]))
 
@@ -27,16 +63,15 @@ function generationMap(persons, unions) {
 
   for (let pass = 0; pass < 12; pass += 1) {
     let changed = false
-    for (const union of unions) {
-      const { partner_a_id: a, partner_b_id: b } = union
-      if (a != null && b != null && gen.has(a) && gen.has(b)) {
-        const high = Math.max(gen.get(a), gen.get(b))
-        if (gen.get(a) !== high) {
-          gen.set(a, high)
+    for (const couple of couples) {
+      if (gen.has(couple.a) && gen.has(couple.b)) {
+        const high = Math.max(gen.get(couple.a), gen.get(couple.b))
+        if (gen.get(couple.a) !== high) {
+          gen.set(couple.a, high)
           changed = true
         }
-        if (gen.get(b) !== high) {
-          gen.set(b, high)
+        if (gen.get(couple.b) !== high) {
+          gen.set(couple.b, high)
           changed = true
         }
       }
@@ -86,19 +121,18 @@ export function computeLayout(persons, unions) {
   }
 
   const byId = new Map(persons.map((p) => [p.id, p]))
-  const gen = generationMap(persons, unions)
+  const couples = effectiveCouples(persons, unions)
+  const gen = generationMap(persons, couples)
 
-  const unionsByPerson = new Map()
-  for (const union of unions) {
-    for (const pid of [union.partner_a_id, union.partner_b_id]) {
-      if (pid == null) continue
-      if (!unionsByPerson.has(pid)) unionsByPerson.set(pid, [])
-      unionsByPerson.get(pid).push(union)
+  const couplesByPerson = new Map()
+  for (const couple of couples) {
+    for (const pid of [couple.a, couple.b]) {
+      if (!couplesByPerson.has(pid)) couplesByPerson.set(pid, [])
+      couplesByPerson.get(pid).push(couple)
     }
   }
 
-  const otherPartner = (union, pid) =>
-    union.partner_a_id === pid ? union.partner_b_id : union.partner_a_id
+  const otherPartner = (couple, pid) => (couple.a === pid ? couple.b : couple.a)
 
   const byGen = new Map()
   for (const person of persons) {
@@ -138,6 +172,8 @@ export function computeLayout(persons, unions) {
       }
     }
 
+    // Pull partners (recorded or derived from their children) next to each other, which is
+    // what lets a marriage line sit between them and the children drop from its middle.
     const remaining = people
       .filter((person) => !placed.has(person.id))
       .sort((a, b) => a.id - b.id)
@@ -146,16 +182,16 @@ export function computeLayout(persons, unions) {
       if (placed.has(person.id)) continue
       placed.add(person.id)
       let index = -1
-      for (const union of unionsByPerson.get(person.id) || []) {
-        const partnerId = otherPartner(union, person.id)
+      for (const couple of couplesByPerson.get(person.id) || []) {
+        const partnerId = otherPartner(couple, person.id)
         if (partnerId != null && placed.has(partnerId)) {
           const partnerIdx = order.findIndex((q) => q.id === partnerId)
           if (partnerIdx >= 0) {
             index = partnerIdx + 1
             while (index < order.length) {
               const candidate = order[index]
-              const sharesSpouse = (unionsByPerson.get(candidate.id) || []).some(
-                (u) => otherPartner(u, candidate.id) === partnerId,
+              const sharesSpouse = (couplesByPerson.get(candidate.id) || []).some(
+                (c) => otherPartner(c, candidate.id) === partnerId,
               )
               if (!sharesSpouse) break
               index += 1
@@ -166,6 +202,70 @@ export function computeLayout(persons, unions) {
       }
       if (index >= 0) order.splice(index, 0, person)
       else order.push(person)
+    }
+
+    // Partners can still end up apart when both have parents of their own, because the
+    // grouping pass above placed each under their own family. Move the partner from the
+    // smaller sibling group next to the other, so the marriage line has somewhere to sit.
+    const partnerKeys = new Set(couples.map((couple) => pairKey(couple.a, couple.b)))
+    const rowIndex = (pid) => order.findIndex((q) => q.id === pid)
+    const adjacentPartners = (pid) =>
+      (couplesByPerson.get(pid) || []).filter((couple) => {
+        const other = rowIndex(otherPartner(couple, pid))
+        const self = rowIndex(pid)
+        return other >= 0 && self >= 0 && Math.abs(other - self) === 1
+      }).length
+
+    const groupSize = new Map()
+    for (const group of orderedGroups) {
+      for (const member of group.members) groupSize.set(member.id, group.members.length)
+    }
+
+    for (const couple of couples) {
+      const indexA = rowIndex(couple.a)
+      const indexB = rowIndex(couple.b)
+      if (indexA < 0 || indexB < 0 || Math.abs(indexA - indexB) === 1) continue
+
+      // Never drag someone away from a partner they already sit beside.
+      const countA = adjacentPartners(couple.a)
+      const countB = adjacentPartners(couple.b)
+      let moveId
+      if (countA !== countB) moveId = countA < countB ? couple.a : couple.b
+      else {
+        const sizeA = groupSize.get(couple.a) ?? Number.MAX_SAFE_INTEGER
+        const sizeB = groupSize.get(couple.b) ?? Number.MAX_SAFE_INTEGER
+        moveId = sizeA <= sizeB ? couple.a : couple.b
+      }
+      const anchorId = moveId === couple.a ? couple.b : couple.a
+
+      const [moved] = order.splice(rowIndex(moveId), 1)
+      let index = rowIndex(anchorId) + 1
+      while (index < order.length && partnerKeys.has(pairKey(order[index].id, anchorId))) {
+        index += 1
+      }
+      order.splice(index, 0, moved)
+    }
+
+    // With two partners, put the person between them (partner - person - partner) so both
+    // marriage lines touch them instead of one line reaching across the other spouse.
+    for (const person of people) {
+      const partnerIds = (couplesByPerson.get(person.id) || [])
+        .map((couple) => otherPartner(couple, person.id))
+        .filter((pid) => pid != null && rowIndex(pid) >= 0)
+      if (partnerIds.length !== 2) continue
+      const [firstId, secondId] = partnerIds
+      const selfIdx = rowIndex(person.id)
+      if (
+        Math.abs(rowIndex(firstId) - selfIdx) === 1 &&
+        Math.abs(rowIndex(secondId) - selfIdx) === 1
+      ) {
+        continue
+      }
+      order.splice(rowIndex(firstId), 1)
+      order.splice(rowIndex(secondId), 1)
+      const personIdx = rowIndex(person.id)
+      order.splice(personIdx, 0, byId.get(firstId))
+      order.splice(personIdx + 2, 0, byId.get(secondId))
     }
 
     order.forEach((person, i) => colIndex.set(person.id, i))
@@ -193,30 +293,26 @@ export function computeLayout(persons, unions) {
     return p ? p.x + NODE_W / 2 : null
   }
 
-  // Marriage bars are drawn just below the row, so a spouse who is not adjacent
-  // (a second marriage) never has its line drawn across another person's card,
-  // and the year label always has clear space to sit in.
   const coupleLinks = []
-  const coupleByKey = new Map()
-  for (const union of unions) {
-    const a = position.get(union.partner_a_id)
-    const b = union.partner_b_id != null ? position.get(union.partner_b_id) : null
+  const coupleBarY = new Map()
+  for (const couple of couples) {
+    const a = position.get(couple.a)
+    const b = position.get(couple.b)
     if (!a || !b || a.y !== b.y) continue
     const ax = a.x + NODE_W / 2
     const bx = b.x + NODE_W / 2
     const rowBottom = a.y + NODE_H
     const y = rowBottom + COUPLE_DROP
-    const d = `M ${ax} ${rowBottom} V ${y} M ${bx} ${rowBottom} V ${y} M ${ax} ${y} H ${bx}`
     coupleLinks.push({
-      id: union.id,
-      status: union.status,
-      start_date: union.start_date,
-      d,
+      id: couple.id,
+      recorded: couple.recorded,
+      status: couple.status,
+      start_date: couple.start_date,
+      d: `M ${ax} ${rowBottom} V ${y} M ${bx} ${rowBottom} V ${y} M ${ax} ${y} H ${bx}`,
       y,
       midX: (ax + bx) / 2,
     })
-    const key = [union.partner_a_id, union.partner_b_id].sort((m, n) => m - n).join(',')
-    coupleByKey.set(key, y)
+    coupleBarY.set(pairKey(couple.a, couple.b), y)
   }
 
   const childGroups = new Map()
@@ -239,7 +335,9 @@ export function computeLayout(persons, unions) {
     const parentBottom = Math.max(...parentPositions.map((p) => p.y + NODE_H))
     const sourceX =
       available.map((pid) => centerX(pid)).reduce((sum, v) => sum + v, 0) / available.length
-    const sourceY = coupleByKey.get([...available].sort((m, n) => m - n).join(',')) ?? parentBottom
+    const sourceY =
+      (available.length === 2 ? coupleBarY.get(pairKey(available[0], available[1])) : null) ??
+      parentBottom
 
     const children = group.children.filter((child) => {
       const childPos = position.get(child.id)
