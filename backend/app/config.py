@@ -3,9 +3,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
-
 BASE_DIR = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = BASE_DIR.parent
+
+# Configuration comes from the project root, then backend-specific overrides.
+load_dotenv(PROJECT_ROOT / ".env")
+load_dotenv(BASE_DIR / ".env")
 
 DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR / "data")))
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", str(DATA_DIR / "uploads")))
@@ -28,6 +31,10 @@ ALLOWED_IMAGE_TYPES = {
     "image/webp",
     "image/gif",
 }
+
+# When the built interface is present, the backend serves it directly. This is what
+# lets a local run be a single process on a single port, with no nginx and no Docker.
+FRONTEND_DIST = Path(os.getenv("FRONTEND_DIST", str(PROJECT_ROOT / "frontend" / "dist")))
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)

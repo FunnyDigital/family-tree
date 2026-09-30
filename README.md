@@ -58,6 +58,33 @@ uploads folder, which makes backup and snapshots on TrueNAS trivial.
 
 ---
 
+## Run it on your own computer (no Docker)
+
+One command starts everything. The backend also serves the built interface, so it is a single
+process on a single address: **http://localhost:8000**.
+
+1. Install **Python 3.11+** (python.org — tick *Add python.exe to PATH*) and **Node 20+**
+   (nodejs.org — use the LTS button).
+2. Double-click **`start.cmd`** in the project folder, or run
+   `powershell -ExecutionPolicy Bypass -File start.ps1`.
+
+The first run creates a Python environment, installs the dependencies and builds the interface —
+a few minutes, with progress shown. After that it starts in seconds and opens your browser
+automatically.
+
+- **Address:** <http://localhost:8000>
+- **Admin login:** `admin` / `family123` — set `$env:ADMIN_PASSWORD` before starting to choose
+  your own (it is only used the first time the database is created).
+- **Demo family:** starts enabled so the tree isn't empty. Delete those people in the admin panel,
+  or set `$env:SEED_DEMO_DATA = "false"` before the first run to begin empty.
+- **Your data:** everything is in `backend/data/` — the SQLite database and uploaded photographs.
+  Copy that folder to back up, paste it back to restore.
+- **Stop it:** press Ctrl+C in the window.
+
+> Want hot-reload while editing code? Use the two-process setup under *Local development* below.
+
+---
+
 ## Install on TrueNAS SCALE 24.10+ (one click)
 
 GitHub builds the two images for free, then you install them from the TrueNAS **Apps** screen — no
@@ -248,6 +275,7 @@ Full interactive docs at `/docs`.
 
 ```
 family-tree/
+├── start.cmd / start.ps1       # run it locally, one command, no Docker
 ├── docker-compose.yml          # build locally (the SSH path)
 ├── .env.example
 ├── deploy/
