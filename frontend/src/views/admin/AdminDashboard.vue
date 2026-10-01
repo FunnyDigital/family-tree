@@ -60,6 +60,57 @@
           </template>
         </EmptyState>
       </section>
+
+      <section class="mt-10">
+        <h2 class="mb-4 font-display text-xl font-semibold">Backup &amp; restore</h2>
+        <div class="card p-5">
+          <div class="flex flex-wrap items-start gap-5">
+            <div class="min-w-0 flex-1">
+              <p class="font-medium">Download a backup</p>
+              <p class="mt-1 text-sm text-ink-muted">
+                Save every person, marriage, photograph record and story as a single file you can
+                keep safe or move to another machine.
+              </p>
+            </div>
+            <button class="btn-ghost shrink-0 !py-2" :disabled="backupBusy" @click="downloadBackup">
+              <Icon name="download" :size="16" />
+              {{ backupBusy ? 'Preparing…' : 'Download backup' }}
+            </button>
+          </div>
+
+          <div class="mt-6 flex flex-wrap items-start gap-5 border-t border-line pt-6">
+            <div class="min-w-0 flex-1">
+              <p class="font-medium">Restore from a backup</p>
+              <p class="mt-1 text-sm text-ink-muted">
+                Replace the current people, marriages, photographs and stories with the contents of a
+                backup file. Your admin login is left as it is.
+              </p>
+            </div>
+            <div class="flex shrink-0 flex-col items-end gap-2">
+              <label
+                class="btn-primary cursor-pointer !py-2"
+                :class="{ 'pointer-events-none opacity-60': restoreBusy }"
+              >
+                <Icon name="upload" :size="16" />
+                {{ restoreBusy ? 'Restoring…' : 'Choose a backup file…' }}
+                <input
+                  type="file"
+                  accept=".db,application/octet-stream,application/x-sqlite3"
+                  class="hidden"
+                  @change="onRestoreFile"
+                />
+              </label>
+              <p
+                v-if="message"
+                class="max-w-xs text-right text-sm"
+                :class="messageError ? 'text-red-600' : 'text-accent-700'"
+              >
+                {{ message }}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
     </template>
   </div>
 </template>
@@ -75,6 +126,11 @@ const stats = ref({})
 const recent = ref([])
 const loading = ref(true)
 
+const backupBusy = ref(false)
+const restoreBusy = ref(false)
+const message = ref('')
+const messageError = ref(false)
+
 const cards = computed(() => [
   { label: 'People', value: stats.value.total_people ?? 0, icon: 'users' },
   { label: 'Generations', value: stats.value.generations ?? 0, icon: 'generations' },
@@ -82,13 +138,70 @@ const cards = computed(() => [
   { label: 'Stories', value: stats.value.total_stories ?? 0, icon: 'leaf' },
 ])
 
+async function load() {
+  const [statsData, peopleData] = await Promise.all([api.getStats(), api.getPersons({ limit: 6 })])
+  stats.value = statsData
+  recent.value = peopleData.items
+}
+
+async function downloadBackup() {
+  backupBusy.value = true
+  message.value = ''
+  try {
+    const blob = await api.downloadBackup()
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'family-tree-backup.db'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+    messageError.value = false
+    message.value = 'Backup downloaded.'
+  } catch (e) {
+    messageError.value = true
+    message.value = e.message
+  } finally {
+    backupBusy.value = false
+  }
+}
+
+async function onRestoreFile(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  const ok = window.confirm(
+    `Replace all current family data with "${file.name}"?\n\nThis overwrites the people, marriages, ` +
+      `photographs and stories currently on this site. It cannot be undone.`,
+  )
+  if (!ok) {
+    event.target.value = ''
+    return
+  }
+  restoreBusy.value = true
+  message.value = ''
+  try {
+    const result = await api.restoreBackup(file)
+    messageError.value = false
+    message.value =
+      `Restored ${result.people} ${result.people === 1 ? 'person' : 'people'}, ` +
+      `${result.unions} ${result.unions === 1 ? 'marriage' : 'marriages'} and ` +
+      `${result.stories} ${result.stories === 1 ? 'story' : 'stories'}.`
+    await load()
+  } catch (e) {
+    messageError.value = true
+    message.value = e.message
+  } finally {
+    restoreBusy.value = false
+    event.target.value = ''
+  }
+}
+
 onMounted(async () => {
   try {
-    const [statsData, peopleData] = await Promise.all([api.getStats(), api.getPersons({ limit: 6 })])
-    stats.value = statsData
-    recent.value = peopleData.items
+    await load()
   } catch {
-    /* ignore */
+    /* leave the dashboard empty */
   } finally {
     loading.value = false
   }

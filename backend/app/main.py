@@ -7,7 +7,7 @@ import app.models  # noqa: F401  (register models before create_all)
 from app.config import FRONTEND_DIST, SITE_TITLE, UPLOAD_DIR
 from app.database import Base, engine
 from app.media import ensure_dirs
-from app.routes import auth, meta, persons, photos, stats, stories, tree, unions
+from app.routes import admin, auth, meta, persons, photos, stats, stories, tree, unions
 
 Base.metadata.create_all(bind=engine)
 ensure_dirs()
@@ -28,7 +28,7 @@ app.add_middleware(
 
 app.mount("/media", StaticFiles(directory=str(UPLOAD_DIR)), name="media")
 
-for module in (auth, meta, persons, unions, photos, stories, tree, stats):
+for module in (auth, admin, meta, persons, unions, photos, stories, tree, stats):
     app.include_router(module.router)
 
 

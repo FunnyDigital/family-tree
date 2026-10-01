@@ -101,4 +101,15 @@ export const api = {
     request(`/persons/${personId}/stories`, { method: 'POST', body: data }),
   updateStory: (id, data) => request(`/stories/${id}`, { method: 'PUT', body: data }),
   deleteStory: (id) => request(`/stories/${id}`, { method: 'DELETE' }),
+
+  downloadBackup: async () => {
+    const res = await fetch(`${API_BASE}/admin/backup`, { headers: authHeaders() })
+    if (!res.ok) throw new Error('Could not create the backup')
+    return res.blob()
+  },
+  restoreBackup: (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return request('/admin/restore', { method: 'POST', body: formData, form: true })
+  },
 }
