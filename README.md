@@ -17,6 +17,9 @@ two Docker containers so it deploys to a TrueNAS server with a single command.
 - **"Down from here" view** — on any profile, a button opens a tree of that person and their partner
   with every descendant beneath them, so you can follow one branch without the rest of the family
   around it.
+- **Backup & restore** — the admin dashboard can download the whole tree as one file, and restore
+  from one. Handy for keeping a copy, or moving everything to another machine without touching the
+  server's filesystem.
 - **Person profiles** — a photo gallery with a lightbox, a biodata table (born, died, places,
   occupation) and every family relationship as a clickable chip.
 - **Photographs** — upload an album per person; the site makes a thumbnail automatically and keeps
@@ -288,7 +291,12 @@ history), asks you to repeat it, and refuses to change anything if the two do no
 
 ## Backups
 
-Everything lives under `DATA_DIR`:
+The easiest way is the **Backup & restore** card on the admin dashboard: *Download backup* gives you
+a single file containing everyone; *Choose a backup file* restores it. Restoring replaces the people,
+marriages, photographs and stories, but leaves your admin login alone. You can use this to move a
+tree between machines without any shell access.
+
+Everything also lives under `DATA_DIR`:
 
 - `family.db` — all people, marriages, photo records and stories.
 - `uploads/` — the original photographs and their thumbnails.
