@@ -127,7 +127,7 @@
 
               <div v-if="spouseUnions.length">
                 <p class="label">Spouse{{ spouseUnions.length > 1 ? 's' : '' }} & children</p>
-                <div v-for="union in spouseUnions" :key="union.id" class="mb-3 last:mb-0">
+                <div v-for="union in spouseUnions" :key="union.partner?.id ?? union.id ?? 'unknown'" class="mb-3 last:mb-0">
                   <div class="flex flex-wrap items-center gap-2">
                     <RelationChip v-if="union.partner" :person="union.partner" />
                     <span class="text-xs text-ink-faint">{{ unionLabel(union) }}</span>

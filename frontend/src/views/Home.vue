@@ -97,7 +97,7 @@ const loading = ref(true)
 const statCards = computed(() => [
   { label: 'Family members', value: stats.value.total_people ?? 0 },
   { label: 'Generations', value: stats.value.generations ?? 0 },
-  { label: 'Unions', value: stats.value.total_unions ?? 0 },
+  { label: 'Marriages', value: stats.value.total_marriages ?? 0 },
   { label: 'Photographs', value: stats.value.total_photos ?? 0 },
 ])
 
