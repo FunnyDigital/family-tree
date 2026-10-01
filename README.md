@@ -265,6 +265,27 @@ Open <http://localhost:5173>. Vite proxies `/api` and `/media` to the backend on
    titled pieces. Blank lines start a new paragraph; `**bold**`, `*italic*` and
    `[links](https://example.com)` are supported.
 
+## Changing the admin password
+
+`ADMIN_PASSWORD` is only used the first time the database is created — editing it later does nothing,
+because the account already exists. To change the password of an account that already exists, use the
+bundled tool:
+
+```bash
+cd backend
+python -m app.set_password            # prompts, and picks the only account
+python -m app.set_password admin      # or name the account explicitly
+```
+
+Inside the running container:
+
+```bash
+docker exec -it <backend-container> python -m app.set_password
+```
+
+It reads the password from the terminal (never from the command line, so it stays out of your shell
+history), asks you to repeat it, and refuses to change anything if the two do not match.
+
 ## Backups
 
 Everything lives under `DATA_DIR`:
