@@ -50,8 +50,8 @@
           </div>
 
           <div v-if="person.unions.length" class="space-y-3">
-            <div v-for="union in person.unions" :key="union.id" class="card p-4">
-              <template v-if="editingUnionId === union.id">
+            <div v-for="union in person.unions" :key="unionKey(union)" class="card p-4">
+              <template v-if="union.id != null && editingUnionId === union.id">
                 <UnionForm
                   :person-id="person.id"
                   :people="people"
@@ -69,10 +69,18 @@
                     · {{ union.children.length }} child{{ union.children.length > 1 ? 'ren' : '' }}
                   </span>
                   <div class="ml-auto flex gap-1">
-                    <button class="rounded-full p-1.5 text-ink-faint hover:text-accent-700" title="Edit" @click="editingUnionId = union.id">
+                    <button
+                      v-if="union.derived"
+                      class="rounded-full px-3 py-1.5 text-xs font-medium text-accent-700 hover:bg-accent-50"
+                      title="Record this marriage so you can add a date or status"
+                      @click="recordMarriage(union)"
+                    >
+                      Add details
+                    </button>
+                    <button v-else class="rounded-full p-1.5 text-ink-faint hover:text-accent-700" title="Edit" @click="editingUnionId = union.id">
                       <Icon name="edit" :size="16" />
                     </button>
-                    <button class="rounded-full p-1.5 text-ink-faint hover:text-red-600" title="Remove" @click="removeUnion(union)">
+                    <button v-if="!union.derived" class="rounded-full p-1.5 text-ink-faint hover:text-red-600" title="Remove" @click="removeUnion(union)">
                       <Icon name="trash" :size="16" />
                     </button>
                   </div>
@@ -231,6 +239,25 @@ async function removePerson() {
 
 function partnerOf(union) {
   return union.partner_a?.id === person.value.id ? union.partner_b : union.partner_a
+}
+
+// Couples derived from shared children have no id of their own, so build a stable key.
+function unionKey(union) {
+  if (union.id != null) return `union-${union.id}`
+  const partner = partnerOf(union)
+  const ids = [person.value.id, partner?.id].filter((id) => id != null).sort((a, b) => a - b)
+  return `derived-${ids.join('-')}`
+}
+
+async function recordMarriage(union) {
+  const partner = partnerOf(union)
+  if (!partner) return
+  await api.createUnion({
+    partner_a_id: person.value.id,
+    partner_b_id: partner.id,
+    status: 'married',
+  })
+  await reload()
 }
 
 function unionSummary(union) {

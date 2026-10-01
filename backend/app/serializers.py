@@ -108,19 +108,33 @@ def primary_photo_map(db: Session, person_ids: Iterable[int]) -> dict[int, Photo
     return result
 
 
-def union_out(union: Union, partner_a: Optional[Person], partner_b: Optional[Person],
-              children: list[Person], photo_map: dict[int, Photo]) -> dict:
+def _couple_out(
+    union_id, status, start_date, end_date, notes, derived, partner_a, partner_b, children, photo_map
+) -> dict:
     return {
-        "id": union.id,
-        "status": union.status,
-        "start_date": union.start_date,
-        "end_date": union.end_date,
-        "notes": union.notes,
-        "partner_a": person_summary(partner_a, photo_map.get(partner_a.id))
-        if partner_a
-        else None,
-        "partner_b": person_summary(partner_b, photo_map.get(partner_b.id))
-        if partner_b
-        else None,
+        "id": union_id,
+        "derived": derived,
+        "status": status,
+        "start_date": start_date,
+        "end_date": end_date,
+        "notes": notes,
+        "partner_a": person_summary(partner_a, photo_map.get(partner_a.id)) if partner_a else None,
+        "partner_b": person_summary(partner_b, photo_map.get(partner_b.id)) if partner_b else None,
         "children": [person_summary(c, photo_map.get(c.id)) for c in children],
     }
+
+
+def union_out(union: Union, partner_a: Optional[Person], partner_b: Optional[Person],
+              children: list[Person], photo_map: dict[int, Photo]) -> dict:
+    return _couple_out(
+        union.id, union.status, union.start_date, union.end_date, union.notes, False,
+        partner_a, partner_b, children, photo_map,
+    )
+
+
+def derived_union_out(partner_a: Optional[Person], partner_b: Optional[Person],
+                      children: list[Person], photo_map: dict[int, Photo]) -> dict:
+    """A couple with no marriage record of its own, implied by having a child together."""
+    return _couple_out(
+        None, "married", None, None, None, True, partner_a, partner_b, children, photo_map,
+    )

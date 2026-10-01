@@ -88,7 +88,6 @@
             :persons="subtree.persons"
             :unions="subtree.unions"
             :show-search="false"
-            :show-legend="false"
           />
         </div>
       </section>

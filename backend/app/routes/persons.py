@@ -6,11 +6,12 @@ from sqlalchemy.orm import Session
 
 from app import media
 from app.deps import get_current_active_user, get_db
-from app.genealogy import children_of, siblings_of, union_children, unions_of
+from app.genealogy import children_of, siblings_of, union_children, union_children_for_pair, unions_of
 from app.models import Person, User as UserModel, Union
 from app.schemas import PersonCreate, PersonUpdate
 from app.serializers import (
     GENDERS,
+    derived_union_out,
     person_summary,
     photo_out,
     primary_photo_map,
@@ -88,17 +89,50 @@ def get_person(person_id: int, db: Session = Depends(get_db)):
     father = db.get(Person, person.father_id) if person.father_id else None
     mother = db.get(Person, person.mother_id) if person.mother_id else None
     siblings = siblings_of(db, person)
-    person_unions = unions_of(db, person.id)
     children = children_of(db, person.id)
 
-    union_details = []
-    involved_ids = {person.id}
-    for union in person_unions:
-        kids = union_children(db, union)
-        union_details.append((union, kids))
-        involved_ids.update(k for k in [union.partner_a_id, union.partner_b_id] if k)
-        involved_ids.update(c.id for c in kids)
+    # A couple is either a recorded marriage, or two people who share a child.
+    explicit = unions_of(db, person.id)
+    recorded_pairs = {
+        (min(union.partner_a_id, union.partner_b_id), max(union.partner_a_id, union.partner_b_id))
+        for union in explicit
+        if union.partner_b_id is not None
+    }
 
+    couples = []
+    for union in explicit:
+        couples.append(
+            (
+                db.get(Person, union.partner_a_id),
+                db.get(Person, union.partner_b_id) if union.partner_b_id else None,
+                union_children(db, union),
+                union,
+            )
+        )
+
+    implied = set()
+    for child in children:
+        other_id = child.mother_id if child.father_id == person.id else child.father_id
+        if other_id is None:
+            continue
+        pair = (min(person.id, other_id), max(person.id, other_id))
+        if pair not in recorded_pairs:
+            implied.add(pair)
+
+    for first_id, second_id in sorted(implied):
+        couples.append(
+            (
+                db.get(Person, first_id),
+                db.get(Person, second_id),
+                union_children_for_pair(db, first_id, second_id),
+                None,
+            )
+        )
+
+    involved_ids = {person.id}
+    for partner_a, partner_b, kids, _union in couples:
+        involved_ids.update(k.id for k in (partner_a, partner_b) if k)
+        involved_ids.update(c.id for c in kids)
     involved_ids.update(c.id for c in children)
     for relative in (father, mother):
         if relative:
@@ -115,10 +149,10 @@ def get_person(person_id: int, db: Session = Depends(get_db)):
         "siblings": [person_summary(s, photo_map.get(s.id)) for s in siblings],
         "children": [person_summary(c, photo_map.get(c.id)) for c in children],
         "unions": [
-            union_out(union, db.get(Person, union.partner_a_id),
-                      db.get(Person, union.partner_b_id) if union.partner_b_id else None,
-                      kids, photo_map)
-            for union, kids in union_details
+            union_out(union, partner_a, partner_b, kids, photo_map)
+            if union
+            else derived_union_out(partner_a, partner_b, kids, photo_map)
+            for partner_a, partner_b, kids, union in couples
         ],
         "photos": [photo_out(ph) for ph in person.photos],
         "stories": [story_out(st) for st in person.stories],

@@ -37,12 +37,15 @@ Each person stores a father and a mother, and marriages are separate records. Th
 can have several marriages (a remarriage or a step-family) and children are attached to the correct
 couple — children from a first marriage and children from a second sit under the right parents.
 
-**You only enter a marriage once.** A couple is drawn whenever two people are recorded as the parents
-of the same child, so filling in a child's father and mother is enough to show the marriage. Couples
-derived that way appear as a **dashed** line; recording the marriage explicitly as a union turns it
-into a **solid** line with its date and status. That means you can add marriages as you go, or never
-bother, and the tree still reads correctly. A person with two spouses is drawn *between* them, so both
-marriage lines touch them rather than one reaching across the other spouse.
+**You only enter a marriage once.** Two people recorded as the parents of the same child *are* a
+couple — that is what a marriage is — so filling in a child's father and mother is enough. The
+marriage then appears as a normal line on the tree and on both people's profiles, with their children
+underneath it, without entering the same relationship a second time.
+
+If you want to add a date or change the status (divorced, widowed, and so on), open the person in the
+admin panel: the marriage is already listed there with an **Add details** button that turns it into a
+full record. A person with two spouses is drawn *between* them, so both marriage lines touch them
+rather than one reaching across the other spouse.
 
 Marriage lines sit just below each row, and the children of a couple drop from the middle of that
 line, so an offspring group always hangs under the right parents and no line is ever drawn across

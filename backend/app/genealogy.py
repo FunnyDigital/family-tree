@@ -58,6 +58,30 @@ def siblings_of(db: Session, person: Person) -> list[Person]:
     return _birth_order(query).all()
 
 
+def implied_couples(persons: list[Person]) -> set[tuple[int, int]]:
+    """People recorded as the mother and father of the same child are a couple.
+
+    Returns normalised (lowest id, highest id) pairs, so a marriage shows up whether or not it was
+    ever entered as its own record.
+    """
+    pairs = set()
+    for person in persons:
+        if person.father_id is None or person.mother_id is None:
+            continue
+        pairs.add((min(person.father_id, person.mother_id), max(person.father_id, person.mother_id)))
+    return pairs
+
+
+def union_children_for_pair(db: Session, first_id: int, second_id: int) -> list[Person]:
+    query = db.query(Person).filter(
+        or_(
+            (Person.father_id == first_id) & (Person.mother_id == second_id),
+            (Person.father_id == second_id) & (Person.mother_id == first_id),
+        )
+    )
+    return _birth_order(query).all()
+
+
 def generation_map(persons: list[Person], unions: list[Union]) -> dict[int, int]:
     by_id = {p.id: p for p in persons}
     gen: dict[int, int] = {p.id: 0 for p in persons}

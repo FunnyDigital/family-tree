@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.deps import get_db
+from app.genealogy import implied_couples
 from app.models import Person, Union
 from app.serializers import person_summary, primary_photo_map
 
@@ -48,5 +49,26 @@ def get_tree(db: Session = Depends(get_db)):
         }
         for u in unions
     ]
+
+    # Couples who have a child together but were never entered as a marriage record. They are
+    # reported as ordinary married couples so the tree treats them identically.
+    recorded = {
+        (min(u.partner_a_id, u.partner_b_id), max(u.partner_a_id, u.partner_b_id))
+        for u in unions
+        if u.partner_b_id is not None
+    }
+    for first_id, second_id in sorted(implied_couples(persons)):
+        if (first_id, second_id) in recorded:
+            continue
+        union_nodes.append(
+            {
+                "id": f"derived-{first_id}-{second_id}",
+                "partner_a_id": first_id,
+                "partner_b_id": second_id,
+                "status": "married",
+                "start_date": None,
+                "end_date": None,
+            }
+        )
 
     return {"persons": person_nodes, "unions": union_nodes}
