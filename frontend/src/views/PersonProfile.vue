@@ -40,13 +40,17 @@
               </span>
             </div>
             <div class="mt-5 flex flex-wrap gap-2">
+              <button class="btn-primary !py-2" @click="toggleTree">
+                <Icon name="generations" :size="16" />
+                {{ showTree ? 'Hide family tree' : 'Show family tree from here' }}
+              </button>
               <RouterLink :to="{ name: 'Tree', query: { focus: person.id } }" class="btn-ghost !py-2">
-                <Icon name="tree" :size="16" /> View in tree
+                <Icon name="tree" :size="16" /> View in full tree
               </RouterLink>
               <RouterLink
                 v-if="isAuthed"
                 :to="`/admin/people/${person.id}`"
-                class="btn-primary !py-2"
+                class="btn-ghost !py-2"
               >
                 <Icon name="edit" :size="16" /> Edit profile
               </RouterLink>
@@ -54,6 +58,40 @@
           </div>
         </div>
       </header>
+
+      <section v-if="showTree" class="mt-8" v-reveal>
+        <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 class="font-display text-2xl font-semibold">
+              Down from {{ person.first_name }}
+            </h2>
+            <p class="mt-1 text-sm text-ink-muted">
+              {{ person.first_name }} and partners, then every descendant beneath them.
+            </p>
+          </div>
+          <span class="text-sm text-ink-faint">
+            {{ subtree.persons.length }} {{ subtree.persons.length === 1 ? 'person' : 'people' }}
+          </span>
+        </div>
+        <div class="h-[560px] overflow-hidden rounded-xl2 border border-line bg-canvas shadow-soft">
+          <div v-if="treeLoading" class="flex h-full items-center justify-center text-ink-muted">
+            Loading family tree…
+          </div>
+          <div
+            v-else-if="subtree.persons.length <= 1"
+            class="flex h-full items-center justify-center p-6 text-center text-sm text-ink-muted"
+          >
+            No descendants recorded for {{ person.first_name }} yet.
+          </div>
+          <FamilyTree
+            v-else
+            :persons="subtree.persons"
+            :unions="subtree.unions"
+            :show-search="false"
+            :show-legend="false"
+          />
+        </div>
+      </section>
 
       <div class="mt-8 grid gap-8 lg:grid-cols-[1.5fr_1fr]">
         <div class="space-y-10">
@@ -141,8 +179,10 @@ import BiodataTable from '../components/BiodataTable.vue'
 import StoryList from '../components/StoryList.vue'
 import RelationChip from '../components/RelationChip.vue'
 import EmptyState from '../components/EmptyState.vue'
+import FamilyTree from '../components/tree/FamilyTree.vue'
 import { api } from '../services/api'
 import { useAuth } from '../composables/useAuth'
+import { descendantSubset } from '../composables/useDescendants'
 import { formatStory, yearOf } from '../utils/text'
 
 const route = useRoute()
@@ -151,6 +191,28 @@ const { isAuthed } = useAuth()
 const person = ref(null)
 const loading = ref(true)
 const error = ref('')
+
+const showTree = ref(false)
+const treeData = ref(null)
+const treeLoading = ref(false)
+
+const subtree = computed(() => {
+  if (!treeData.value || !person.value) return { persons: [], unions: [] }
+  return descendantSubset(person.value.id, treeData.value.persons, treeData.value.unions)
+})
+
+async function toggleTree() {
+  showTree.value = !showTree.value
+  if (!showTree.value || treeData.value) return
+  treeLoading.value = true
+  try {
+    treeData.value = await api.getTree()
+  } catch {
+    treeData.value = { persons: [], unions: [] }
+  } finally {
+    treeLoading.value = false
+  }
+}
 
 const photos = computed(() => person.value?.photos || [])
 const stories = computed(() => person.value?.stories || [])
@@ -196,6 +258,7 @@ async function load() {
   loading.value = true
   error.value = ''
   person.value = null
+  showTree.value = false
   try {
     person.value = await api.getPerson(route.params.id)
   } catch (e) {

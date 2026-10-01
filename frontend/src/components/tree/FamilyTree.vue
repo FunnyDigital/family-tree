@@ -51,6 +51,7 @@
       :search="search"
       :matches="matches"
       :zoom="zoom"
+      :show-search="showSearch"
       @update:search="onSearch"
       @select="selectPerson"
       @zoom-in="pz?.zoomBy(1.2)"
@@ -65,7 +66,7 @@
           <span class="font-medium text-ink-soft">{{ layout.generations }}</span> generations
         </div>
         <div
-          v-if="recordedCouples.length || derivedCouples.length"
+          v-if="showLegend && (recordedCouples.length || derivedCouples.length)"
           class="pointer-events-auto flex items-center gap-3 rounded-full border border-line bg-white/90 px-3.5 py-1.5 text-xs text-ink-muted shadow-soft backdrop-blur"
         >
           <span v-if="recordedCouples.length" class="flex items-center gap-1.5">
@@ -113,6 +114,8 @@ const props = defineProps({
   persons: { type: Array, default: () => [] },
   unions: { type: Array, default: () => [] },
   focusId: { type: [Number, String], default: null },
+  showSearch: { type: Boolean, default: true },
+  showLegend: { type: Boolean, default: true },
 })
 
 const pz = ref(null)

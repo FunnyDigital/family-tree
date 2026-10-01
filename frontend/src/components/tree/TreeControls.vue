@@ -1,6 +1,6 @@
 <template>
   <div class="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-3 p-3 sm:p-4">
-    <div class="pointer-events-auto relative w-full max-w-xs">
+    <div v-if="showSearch" class="pointer-events-auto relative w-full max-w-xs">
       <SearchBar
         :model-value="search"
         placeholder="Find a person…"
@@ -45,6 +45,7 @@ defineProps({
   search: { type: String, default: '' },
   matches: { type: Array, default: () => [] },
   zoom: { type: Number, default: 100 },
+  showSearch: { type: Boolean, default: true },
 })
 defineEmits(['update:search', 'select', 'zoomIn', 'zoomOut', 'fit'])
 </script>

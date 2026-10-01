@@ -5,16 +5,21 @@ export const Y_GAP = 108
 export const COUPLE_DROP = 22
 export const ROW_H = NODE_H + Y_GAP
 
+/** Extra space between separate family units in the same row. */
+export const CLUSTER_GAP = 48
+
 const SLOT_W = NODE_W + X_GAP
+const BUS_BASE = 18
+const BUS_LANE = 15
+const ORDER_PASSES = 4
 
 function pairKey(a, b) {
   return a <= b ? `${a},${b}` : `${b},${a}`
 }
 
 /**
- * A couple is either an explicitly recorded union, or two people who are father and
- * mother of the same child. Deriving the second kind means a marriage never has to be
- * entered twice: recording both parents of a child is enough to draw the couple.
+ * A couple is either an explicitly recorded union, or two people who are father and mother of
+ * the same child. Deriving the second kind means a marriage never has to be entered twice.
  */
 function effectiveCouples(persons, unions) {
   const couples = new Map()
@@ -31,9 +36,11 @@ function effectiveCouples(persons, unions) {
     })
   }
 
+  const known = new Set(persons.map((p) => p.id))
   for (const person of persons) {
     const { father_id: father, mother_id: mother } = person
     if (father == null || mother == null) continue
+    if (!known.has(father) || !known.has(mother)) continue
     const key = pairKey(father, mother)
     if (!couples.has(key)) {
       couples.set(key, { id: `derived-${key}`, a: father, b: mother, recorded: false })
@@ -94,13 +101,6 @@ function generationMap(persons, couples) {
   return gen
 }
 
-function parentKey(person) {
-  const ids = [person.father_id, person.mother_id]
-    .filter((value) => value != null)
-    .sort((a, b) => a - b)
-  return ids.length ? ids.join(',') : null
-}
-
 function birthValue(person) {
   const match = String(person.birth_date || '').match(/\d{4}/)
   return match ? Number(match[0]) : Number.MAX_SAFE_INTEGER
@@ -113,6 +113,12 @@ function roundedBranch(sx, busY, cx, cy) {
   const r = Math.min(12, dist / 2, Math.max(0, (cy - busY) / 2))
   if (r < 1) return `M ${sx} ${busY} H ${cx} V ${cy}`
   return `M ${sx} ${busY} H ${cx - dir * r} Q ${cx} ${busY} ${cx} ${busY + r} V ${cy}`
+}
+
+function mean(values) {
+  const real = values.filter((value) => Number.isFinite(value))
+  if (!real.length) return null
+  return real.reduce((sum, value) => sum + value, 0) / real.length
 }
 
 export function computeLayout(persons, unions) {
@@ -131,56 +137,67 @@ export function computeLayout(persons, unions) {
       couplesByPerson.get(pid).push(couple)
     }
   }
-
   const otherPartner = (couple, pid) => (couple.a === pid ? couple.b : couple.a)
 
-  const byGen = new Map()
-  for (const person of persons) {
-    const g = gen.get(person.id) ?? 0
-    if (!byGen.has(g)) byGen.set(g, [])
-    byGen.get(g).push(person)
+  // A person's birth family, used to keep blood siblings together and to group separate
+  // families apart on the row.
+  const birthFamilyKey = (person) => {
+    const ids = [person.father_id, person.mother_id]
+      .filter((value) => value != null && byId.has(value))
+      .sort((a, b) => a - b)
+    return ids.length ? `p:${ids.join(',')}` : null
   }
 
-  const gens = [...byGen.keys()].sort((a, b) => a - b)
-  const colIndex = new Map()
-
-  for (const g of gens) {
-    const people = byGen.get(g)
-    const placed = new Set()
-    const order = []
-
-    const groups = new Map()
-    for (const person of people) {
-      const key = parentKey(person)
-      if (!key) continue
-      if (!groups.has(key)) groups.set(key, { key, anchor: Infinity, members: [] })
-      const parentIds = key.split(',').map(Number)
-      const xs = parentIds.map((pid) => colIndex.get(pid)).filter((value) => value != null)
-      groups.get(key).anchor = Math.min(
-        groups.get(key).anchor,
-        xs.length ? xs.reduce((sum, v) => sum + v, 0) / xs.length : Infinity,
-      )
-      groups.get(key).members.push(person)
-    }
-
-    const orderedGroups = [...groups.values()].sort((a, b) => a.anchor - b.anchor)
-    for (const group of orderedGroups) {
-      group.members.sort((a, b) => birthValue(a) - birthValue(b) || a.id - b.id)
-      for (const member of group.members) {
-        placed.add(member.id)
-        order.push(member)
+  const clusterKeyOf = new Map()
+  for (const person of persons) {
+    const candidates = []
+    const own = birthFamilyKey(person)
+    if (own) candidates.push(own)
+    for (const couple of couplesByPerson.get(person.id) || []) {
+      const partner = byId.get(otherPartner(couple, person.id))
+      if (partner) {
+        const partnerKey = birthFamilyKey(partner)
+        if (partnerKey) candidates.push(partnerKey)
       }
     }
+    if (candidates.length) {
+      // Marrying in joins the partner's family; the lowest key keeps both partners together.
+      clusterKeyOf.set(person.id, [...candidates].sort()[0])
+    } else if ((couplesByPerson.get(person.id) || []).length) {
+      const couple = couplesByPerson.get(person.id)[0]
+      clusterKeyOf.set(person.id, `c:${pairKey(couple.a, couple.b)}`)
+    } else {
+      clusterKeyOf.set(person.id, `s:${person.id}`)
+    }
+  }
 
-    // Pull partners (recorded or derived from their children) next to each other, which is
-    // what lets a marriage line sit between them and the children drop from its middle.
-    const remaining = people
-      .filter((person) => !placed.has(person.id))
+  const gens = [...new Set(persons.map((p) => gen.get(p.id) ?? 0))].sort((a, b) => a - b)
+  const rows = gens.map((g) => persons.filter((p) => (gen.get(p.id) ?? 0) === g))
+
+  const membersByCluster = rows.map((row) => {
+    const map = new Map()
+    for (const person of row) {
+      const key = clusterKeyOf.get(person.id)
+      if (!map.has(key)) map.set(key, [])
+      map.get(key).push(person)
+    }
+    return map
+  })
+
+  // Order within one family: blood members by birth, then spouses beside their partner.
+  const layoutWithinCluster = (members, key) => {
+    const blood = members
+      .filter((person) => birthFamilyKey(person) === key)
+      .sort((a, b) => birthValue(a) - birthValue(b) || a.id - b.id)
+    const others = members
+      .filter((person) => birthFamilyKey(person) !== key)
       .sort((a, b) => a.id - b.id)
 
-    for (const person of remaining) {
-      if (placed.has(person.id)) continue
-      placed.add(person.id)
+    const order = [...blood]
+    const placed = new Set(order.map((person) => person.id))
+    const isPartner = (x, y) => x != null && y != null && pairKey(x, y) !== null && couples.some((c) => (c.a === x && c.b === y) || (c.a === y && c.b === x))
+
+    for (const person of others) {
       let index = -1
       for (const couple of couplesByPerson.get(person.id) || []) {
         const partnerId = otherPartner(couple, person.id)
@@ -188,67 +205,23 @@ export function computeLayout(persons, unions) {
           const partnerIdx = order.findIndex((q) => q.id === partnerId)
           if (partnerIdx >= 0) {
             index = partnerIdx + 1
-            while (index < order.length) {
-              const candidate = order[index]
-              const sharesSpouse = (couplesByPerson.get(candidate.id) || []).some(
-                (c) => otherPartner(c, candidate.id) === partnerId,
-              )
-              if (!sharesSpouse) break
-              index += 1
-            }
+            while (index < order.length && isPartner(order[index].id, partnerId)) index += 1
             break
           }
         }
       }
       if (index >= 0) order.splice(index, 0, person)
       else order.push(person)
+      placed.add(person.id)
     }
+    return order
+  }
 
-    // Partners can still end up apart when both have parents of their own, because the
-    // grouping pass above placed each under their own family. Move the partner from the
-    // smaller sibling group next to the other, so the marriage line has somewhere to sit.
-    const partnerKeys = new Set(couples.map((couple) => pairKey(couple.a, couple.b)))
-    const rowIndex = (pid) => order.findIndex((q) => q.id === pid)
-    const adjacentPartners = (pid) =>
-      (couplesByPerson.get(pid) || []).filter((couple) => {
-        const other = rowIndex(otherPartner(couple, pid))
-        const self = rowIndex(pid)
-        return other >= 0 && self >= 0 && Math.abs(other - self) === 1
-      }).length
+  const clusterOrder = rows.map((_, r) => [...membersByCluster[r].keys()])
 
-    const groupSize = new Map()
-    for (const group of orderedGroups) {
-      for (const member of group.members) groupSize.set(member.id, group.members.length)
-    }
-
-    for (const couple of couples) {
-      const indexA = rowIndex(couple.a)
-      const indexB = rowIndex(couple.b)
-      if (indexA < 0 || indexB < 0 || Math.abs(indexA - indexB) === 1) continue
-
-      // Never drag someone away from a partner they already sit beside.
-      const countA = adjacentPartners(couple.a)
-      const countB = adjacentPartners(couple.b)
-      let moveId
-      if (countA !== countB) moveId = countA < countB ? couple.a : couple.b
-      else {
-        const sizeA = groupSize.get(couple.a) ?? Number.MAX_SAFE_INTEGER
-        const sizeB = groupSize.get(couple.b) ?? Number.MAX_SAFE_INTEGER
-        moveId = sizeA <= sizeB ? couple.a : couple.b
-      }
-      const anchorId = moveId === couple.a ? couple.b : couple.a
-
-      const [moved] = order.splice(rowIndex(moveId), 1)
-      let index = rowIndex(anchorId) + 1
-      while (index < order.length && partnerKeys.has(pairKey(order[index].id, anchorId))) {
-        index += 1
-      }
-      order.splice(index, 0, moved)
-    }
-
-    // With two partners, put the person between them (partner - person - partner) so both
-    // marriage lines touch them instead of one line reaching across the other spouse.
-    for (const person of people) {
+  const centringPass = (row) => {
+    const rowIndex = (pid) => row.findIndex((q) => q.id === pid)
+    for (const person of [...row]) {
       const partnerIds = (couplesByPerson.get(person.id) || [])
         .map((couple) => otherPartner(couple, person.id))
         .filter((pid) => pid != null && rowIndex(pid) >= 0)
@@ -261,38 +234,113 @@ export function computeLayout(persons, unions) {
       ) {
         continue
       }
-      order.splice(rowIndex(firstId), 1)
-      order.splice(rowIndex(secondId), 1)
+      row.splice(rowIndex(firstId), 1)
+      row.splice(rowIndex(secondId), 1)
       const personIdx = rowIndex(person.id)
-      order.splice(personIdx, 0, byId.get(firstId))
-      order.splice(personIdx + 2, 0, byId.get(secondId))
+      row.splice(personIdx, 0, byId.get(firstId))
+      row.splice(personIdx + 2, 0, byId.get(secondId))
     }
-
-    order.forEach((person, i) => colIndex.set(person.id, i))
+    return row
   }
 
-  const rowWidth = (count) => (count ? (count - 1) * SLOT_W + NODE_W : 0)
-  const maxWidth = Math.max(...gens.map((g) => rowWidth(byGen.get(g).length)))
+  const buildRows = () =>
+    rows.map((_, r) => {
+      const members = membersByCluster[r]
+      const row = []
+      for (const key of clusterOrder[r]) {
+        row.push(...layoutWithinCluster(members.get(key) || [], key))
+      }
+      return centringPass(row)
+    })
+
+  let order = buildRows()
+  const indexMap = (row) => new Map(row.map((person, i) => [person.id, i]))
+
+  const parentPositions = (person, above) => {
+    const ids = [person.father_id, person.mother_id].filter((id) => id != null)
+    return ids.map((id) => above.get(id)).filter((value) => value != null)
+  }
+  const childPositions = (person, below) =>
+    persons
+      .filter((other) => other.father_id === person.id || other.mother_id === person.id)
+      .map((child) => below.get(child.id))
+      .filter((value) => value != null)
+
+  // Alternate passes: pull children under their parents, then parents over their children.
+  // This is what stops one family's line being drawn across another family's children.
+  for (let pass = 0; pass < ORDER_PASSES; pass += 1) {
+    const index = order.map(indexMap)
+
+    for (let r = 1; r < rows.length; r += 1) {
+      const above = index[r - 1]
+      const barycentre = new Map(
+        clusterOrder[r].map((key) => [
+          key,
+          mean(
+            (membersByCluster[r].get(key) || []).flatMap((person) => parentPositions(person, above)),
+          ),
+        ]),
+      )
+      clusterOrder[r] = [...clusterOrder[r]].sort(
+        (a, b) => (barycentre.get(a) ?? Infinity) - (barycentre.get(b) ?? Infinity),
+      )
+    }
+
+    for (let r = rows.length - 2; r >= 0; r -= 1) {
+      const below = index[r + 1]
+      const barycentre = new Map(
+        clusterOrder[r].map((key) => [
+          key,
+          mean(
+            (membersByCluster[r].get(key) || []).flatMap((person) =>
+              childPositions(person, below),
+            ),
+          ),
+        ]),
+      )
+      clusterOrder[r] = [...clusterOrder[r]].sort(
+        (a, b) => (barycentre.get(a) ?? Infinity) - (barycentre.get(b) ?? Infinity),
+      )
+    }
+
+    order = buildRows()
+  }
+
+  // --- positions -----------------------------------------------------------
+  const rowWidths = order.map((row) => {
+    let cursor = 0
+    row.forEach((person, i) => {
+      if (i > 0 && clusterKeyOf.get(person.id) !== clusterKeyOf.get(row[i - 1].id)) {
+        cursor += CLUSTER_GAP
+      }
+      cursor += SLOT_W
+    })
+    return cursor ? cursor - X_GAP : 0
+  })
+  const maxWidth = Math.max(...rowWidths, 0)
   const height = (gens.length - 1) * ROW_H + NODE_H
 
   const nodes = []
   const position = new Map()
-  for (const g of gens) {
-    const people = byGen.get(g)
-    const offset = (maxWidth - rowWidth(people.length)) / 2
-    for (const person of people) {
-      const x = offset + colIndex.get(person.id) * SLOT_W
-      const y = g * ROW_H
-      position.set(person.id, { x, y })
-      nodes.push({ person, x, y, gen: g })
-    }
-  }
+  order.forEach((row, r) => {
+    const offset = (maxWidth - rowWidths[r]) / 2
+    let cursor = offset
+    row.forEach((person, i) => {
+      if (i > 0 && clusterKeyOf.get(person.id) !== clusterKeyOf.get(row[i - 1].id)) {
+        cursor += CLUSTER_GAP
+      }
+      position.set(person.id, { x: cursor, y: r * ROW_H })
+      nodes.push({ person, x: cursor, y: r * ROW_H, gen: gens[r] })
+      cursor += SLOT_W
+    })
+  })
 
   const centerX = (pid) => {
     const p = position.get(pid)
     return p ? p.x + NODE_W / 2 : null
   }
 
+  // --- marriage lines ------------------------------------------------------
   const coupleLinks = []
   const coupleBarY = new Map()
   for (const couple of couples) {
@@ -315,24 +363,28 @@ export function computeLayout(persons, unions) {
     coupleBarY.set(pairKey(couple.a, couple.b), y)
   }
 
+  // --- child connectors ----------------------------------------------------
   const childGroups = new Map()
   for (const person of persons) {
     const g = gen.get(person.id) ?? 0
     if (g === 0) continue
-    const key = parentKey(person)
-    if (!key) continue
+    const ids = [person.father_id, person.mother_id]
+      .filter((value) => value != null)
+      .sort((a, b) => a - b)
+    if (!ids.length) continue
+    const key = ids.join(',')
     if (!childGroups.has(key)) {
-      childGroups.set(key, { key, parents: key.split(',').map(Number), children: [] })
+      childGroups.set(key, { key, parents: ids, children: [], sourceX: 0, sourceY: 0 })
     }
     childGroups.get(key).children.push(person)
   }
 
-  const paths = []
+  const prepared = []
   for (const group of childGroups.values()) {
     const available = group.parents.filter((pid) => position.has(pid))
     if (!available.length) continue
-    const parentPositions = available.map((pid) => position.get(pid))
-    const parentBottom = Math.max(...parentPositions.map((p) => p.y + NODE_H))
+    const parentPositionsInRow = available.map((pid) => position.get(pid))
+    const parentBottom = Math.max(...parentPositionsInRow.map((p) => p.y + NODE_H))
     const sourceX =
       available.map((pid) => centerX(pid)).reduce((sum, v) => sum + v, 0) / available.length
     const sourceY =
@@ -344,13 +396,25 @@ export function computeLayout(persons, unions) {
       return childPos && childPos.y > sourceY
     })
     if (!children.length) continue
+    prepared.push({ ...group, sourceX, sourceY, parentBottom, children })
+  }
 
-    const childTop = Math.min(...children.map((c) => position.get(c.id).y))
-    const busY = sourceY + Math.max(14, (childTop - sourceY) * 0.5)
+  // Give every family its own horizontal level, so two families' lines never sit on top of
+  // each other and read as one.
+  prepared.sort((a, b) => a.sourceX - b.sourceX)
+  const lanesByRow = new Map()
+  const paths = []
+  for (const group of prepared) {
+    const parentRow = Math.round((group.sourceY - COUPLE_DROP - NODE_H) / ROW_H)
+    const lane = lanesByRow.get(parentRow) ?? 0
+    lanesByRow.set(parentRow, lane + 1)
 
-    let d = `M ${sourceX} ${sourceY} V ${busY}`
-    for (const child of children) {
-      d += ' ' + roundedBranch(sourceX, busY, centerX(child.id), position.get(child.id).y)
+    const childTop = Math.min(...group.children.map((c) => position.get(c.id).y))
+    const busY = Math.min(group.sourceY + BUS_BASE + lane * BUS_LANE, childTop - 6)
+
+    let d = `M ${group.sourceX} ${group.parentBottom} V ${busY}`
+    for (const child of group.children) {
+      d += ' ' + roundedBranch(group.sourceX, busY, centerX(child.id), position.get(child.id).y)
     }
     paths.push({ key: group.key, d })
   }

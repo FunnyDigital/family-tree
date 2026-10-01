@@ -11,7 +11,12 @@ two Docker containers so it deploys to a TrueNAS server with a single command.
 ## What it does
 
 - **Interactive family tree** — every generation laid out in rows with couples linked and children
-  connected to their parents. Pan, drag and zoom; click any card to open that person.
+  connected to their parents. Separate families are spaced apart, each couple's line runs at its own
+  height so two families' lines never merge, and a person's line is drawn straight down from their
+  own parents. Pan, drag and zoom; click any card to open that person.
+- **"Down from here" view** — on any profile, a button opens a tree of that person and their partner
+  with every descendant beneath them, so you can follow one branch without the rest of the family
+  around it.
 - **Person profiles** — a photo gallery with a lightbox, a biodata table (born, died, places,
   occupation) and every family relationship as a clickable chip.
 - **Photographs** — upload an album per person; the site makes a thumbnail automatically and keeps
@@ -39,6 +44,12 @@ marriage lines touch them rather than one reaching across the other spouse.
 Marriage lines sit just below each row, and the children of a couple drop from the middle of that
 line, so an offspring group always hangs under the right parents and no line is ever drawn across
 someone else's card.
+
+The order of each row is worked out by repeatedly pulling children under their parents and parents
+over their children, so a couple is generally drawn directly above their own offspring. Distinct
+families in the same row are separated by a wider gap, so two couples never read as one group of
+four, and each family's connector runs at a slightly different height so lines from different
+families don't sit on top of each other.
 
 ---
 
