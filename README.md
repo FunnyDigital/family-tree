@@ -289,6 +289,29 @@ docker exec -it <backend-container> python -m app.set_password
 It reads the password from the terminal (never from the command line, so it stays out of your shell
 history), asks you to repeat it, and refuses to change anything if the two do not match.
 
+### If you are locked out
+
+Because `ADMIN_PASSWORD` is only read when the account is first created, a forgotten password (or a
+first start where the placeholder in the YAML was never edited) leaves no way in. Set
+`ADMIN_PASSWORD_RESET=true` alongside `ADMIN_PASSWORD` and restart the app — the password is applied
+on the next start:
+
+```yaml
+- ADMIN_PASSWORD=<the password you want>
+- ADMIN_PASSWORD_RESET=true
+```
+
+The startup log says which account it changed, which is useful if the username is not the one you
+expected:
+
+```
+[seed] Reset the password for admin user 'admin' from ADMIN_PASSWORD
+```
+
+Once you are back in, **remove the `ADMIN_PASSWORD_RESET` line** and redeploy. While it is set, every
+restart re-applies `ADMIN_PASSWORD`, which would silently undo any password you set another way. (If
+the password already matches, it is a no-op — but removing it keeps things predictable.)
+
 ## Backups
 
 The easiest way is the **Backup & restore** card on the admin dashboard: *Download backup* gives you

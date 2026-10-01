@@ -2,7 +2,7 @@ import os
 
 from sqlalchemy.orm import Session
 
-from app.auth import get_password_hash
+from app.auth import get_password_hash, verify_password
 from app.database import Base, SessionLocal, engine
 from app.models import Person, Union, User
 
@@ -23,6 +23,38 @@ def _seed_admin(db: Session) -> None:
     db.add(User(username=username, hashed_password=get_password_hash(password)))
     db.commit()
     print(f"[seed] Created admin user: {username}")
+
+
+def _reset_admin_password(db: Session) -> None:
+    """Recovery path for a forgotten admin password.
+
+    ADMIN_PASSWORD is otherwise only read when the account is first created, so editing it later
+    has no effect and there is no way back in. Setting ADMIN_PASSWORD_RESET=true applies it on the
+    next start instead. Turns itself into a no-op once the password already matches.
+    """
+    if not env_bool("ADMIN_PASSWORD_RESET", False):
+        return
+
+    password = os.getenv("ADMIN_PASSWORD")
+    if not password:
+        print("[seed] ADMIN_PASSWORD_RESET is on but ADMIN_PASSWORD is empty - nothing to reset")
+        return
+
+    wanted = os.getenv("ADMIN_USERNAME", "admin")
+    user = db.query(User).filter(User.username == wanted).first()
+    if user is None:
+        user = db.query(User).order_by(User.id).first()
+    if user is None:
+        print("[seed] ADMIN_PASSWORD_RESET is on but there are no accounts to reset")
+        return
+
+    if verify_password(password, user.hashed_password):
+        print(f"[seed] Password for admin user {user.username!r} already matches ADMIN_PASSWORD")
+        return
+
+    user.hashed_password = get_password_hash(password)
+    db.commit()
+    print(f"[seed] Reset the password for admin user {user.username!r} from ADMIN_PASSWORD")
 
 
 def _person(db: Session, first, last, **kwargs) -> Person:
@@ -84,6 +116,7 @@ def seed_database() -> None:
     db: Session = SessionLocal()
     try:
         _seed_admin(db)
+        _reset_admin_password(db)
         if env_bool("SEED_DEMO_DATA", False) and db.query(Person).count() == 0:
             _seed_demo(db)
     finally:
